@@ -51,31 +51,37 @@ void setup() {
 
   startAccessPoint();
 
-  // Serve a simple HTML form
+  // Serve WiFi config HTML page
   server.on("/", HTTP_GET, [](AsyncWebServerRequest* req) {
-    String html = R"rawliteral(
-      <h2>WiFi Configuration</h2>
-      <form id='wifiForm'>
-        SSID: <input name='ssid' id='ssid'><br>
-        Password: <input name='password' id='password' type='password'><br><br>
-        <button type='submit'>Connect</button>
-      </form>
-      <script>
-        const form = document.getElementById('wifiForm');
-        form.addEventListener('submit', async e => {
-          e.preventDefault();
-          const ssid = document.getElementById('ssid').value;
-          const password = document.getElementById('password').value;
+    const char* html = R"rawliteral(
+      <!DOCTYPE html>
+      <html>
+      <head><title>WiFi Configuration</title></head>
+      <body>
+        <h2>WiFi Configuration</h2>
+        <form id='wifiForm'>
+          SSID: <input name='ssid' id='ssid' required><br>
+          Password: <input name='password' id='password' type='password' required><br><br>
+          <button type='submit'>Connect</button>
+        </form>
+        <script>
+          const form = document.getElementById('wifiForm');
+          form.addEventListener('submit', async e => {
+            e.preventDefault();
+            const ssid = document.getElementById('ssid').value;
+            const password = document.getElementById('password').value;
 
-          const res = await fetch('/configure', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ssid, password })
+            const res = await fetch('/configure', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ ssid, password })
+            });
+
+            alert(await res.text());
           });
-
-          alert(await res.text());
-        });
-      </script>
+        </script>
+      </body>
+      </html>
     )rawliteral";
 
     req->send(200, "text/html", html);
@@ -84,7 +90,8 @@ void setup() {
   // Handle POST with JSON WiFi credentials
   server.on("/configure", HTTP_POST, [](AsyncWebServerRequest* req) {}, NULL,
     [](AsyncWebServerRequest* req, uint8_t* data, size_t len, size_t index, size_t total) {
-      StaticJsonDocument<256> json;
+      
+      DynamicJsonDocument json(256);
       auto error = deserializeJson(json, data, len);
 
       if (error) {
@@ -109,5 +116,5 @@ void setup() {
 }
 
 void loop() {
-  // no need to do anything here
+  // Nothing needed here
 }
