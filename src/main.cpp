@@ -57,13 +57,10 @@ void connectToWiFi(const String &ssid, const String &pass) {
 
   startBlink(500); // Blink LED while connecting (non-blocking)
 
-  unsigned long startAttemptTime = millis();
-  const unsigned long connectTimeout = 10000; // 10 seconds timeout
-
-  // Non-blocking connect loop
-  while (WiFi.status() != WL_CONNECTED && millis() - startAttemptTime < connectTimeout) {
-    // No delay here, blinking handled in loop()
-    yield(); // let WiFi stack run
+  int retries = 0;
+  while (WiFi.status() != WL_CONNECTED && retries < 20) {
+    delay(500); // just wait, blinking handled by loop()
+    retries++;
   }
 
   if (WiFi.status() == WL_CONNECTED) {
@@ -76,7 +73,6 @@ void connectToWiFi(const String &ssid, const String &pass) {
     turnOnLED(); // Keep ON because AP is still active
   }
 }
-
 
 void saveCredentials(const String &ssid, const String &pass) {
   EEPROM.writeString(0, ssid);
@@ -95,23 +91,14 @@ void setup() {
   pinMode(LED_PIN, OUTPUT);
   turnOffLED(); // OFF until AP starts
 
-  // ========== NEW FEATURE: Reset EEPROM credentials ==========
-  Serial.println("Clearing saved WiFi credentials...");
-  for (int i = 0; i < EEPROM_SIZE; i++) {
-    EEPROM.write(i, 0);
-  }
-  EEPROM.commit();
-  Serial.println("EEPROM cleared!");
-  // ============================================================
-
   // Start AP first so it's always available
   startAccessPoint();
 
-  // Load saved credentials but DO NOT auto-connect for now
+  // Load saved credentials and try connecting in STA mode
   loadCredentials(inputSSID, inputPassword);
   if (inputSSID.length() > 0) {
-    Serial.println("Saved WiFi credentials found but auto-connect is DISABLED.");
-    // connectToWiFi(inputSSID, inputPassword); // 🔴 Disabled auto-connect
+    Serial.println("Found saved WiFi credentials, trying to connect...");
+    connectToWiFi(inputSSID, inputPassword);
   }
 
   // Serve HTML form
