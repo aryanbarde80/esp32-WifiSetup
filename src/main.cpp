@@ -4,56 +4,56 @@
 #include <ArduinoJson.h>
 #include <EEPROM.h>
 
-#define LED_PIN 2      // Blue LED pin
-#define EEPROM_SIZE 96 // For storing credentials
+#define LED_PIN 2
+#define EEPROM_SIZE 96
 
 AsyncWebServer server(80);
 
 String inputSSID;
 String inputPassword;
 
-void turnOnLED() {
-  digitalWrite(LED_PIN, HIGH);
-}
+// ===================== LED State Meaning =====================
+// LED ON     → ESP32 is in Access Point (AP) mode OR successfully connected to WiFi
+// LED OFF    → ESP32 has not connected to any network (initial state / failed connection)
+// LED BLINK  → ESP32 is trying to connect to a saved WiFi network in Station (STA) mode
+// ===============================================================
 
-void turnOffLED() {
-  digitalWrite(LED_PIN, LOW);
-}
+void turnOnLED() { digitalWrite(LED_PIN, HIGH); }   // Solid light (AP mode active or STA connected)
+void turnOffLED() { digitalWrite(LED_PIN, LOW); }   // LED off (no connection)
 
+// Always start AP mode
 void startAccessPoint() {
-  WiFi.mode(WIFI_AP);
+  WiFi.mode(WIFI_AP_STA); // AP + Station mode
   WiFi.softAP("wifiSetup-Esp32", "bluewave@123");
 
-  Serial.println("Access Point Mode Started");
+  Serial.println("\nAccess Point Started");
   Serial.println("SSID: wifiSetup-Esp32");
   Serial.println("Password: bluewave@123");
   Serial.print("AP IP Address: ");
   Serial.println(WiFi.softAPIP());
 
-  turnOnLED();
+  turnOnLED(); // LED stays ON in AP mode
 }
 
 void connectToWiFi(const String &ssid, const String &pass) {
-  WiFi.mode(WIFI_STA);
+  Serial.printf("Connecting to WiFi: %s\n", ssid.c_str());
   WiFi.begin(ssid.c_str(), pass.c_str());
 
-  Serial.print("Connecting to WiFi");
   int retries = 0;
-
   while (WiFi.status() != WL_CONNECTED && retries < 20) {
+    digitalWrite(LED_PIN, !digitalRead(LED_PIN)); // Blink LED while connecting
     delay(500);
-    Serial.print(".");
     retries++;
   }
 
   if (WiFi.status() == WL_CONNECTED) {
-    Serial.println("\nConnected!");
+    Serial.println("\nConnected to WiFi!");
     Serial.print("IP address: ");
     Serial.println(WiFi.localIP());
-    turnOnLED();
+    turnOnLED(); // Solid ON when connected
   } else {
-    Serial.println("\nFailed to connect. Starting AP mode...");
-    startAccessPoint();
+    Serial.println("\nFailed to connect to saved WiFi.");
+    turnOffLED(); // OFF if connection fails
   }
 }
 
@@ -72,23 +72,19 @@ void setup() {
   Serial.begin(115200);
   EEPROM.begin(EEPROM_SIZE);
   pinMode(LED_PIN, OUTPUT);
-  turnOffLED();
+  turnOffLED(); // OFF until AP starts
 
-  // Load saved Wi-Fi credentials
-  loadCredentials(inputSSID, inputPassword);
-
-  if (inputSSID.length() > 0) {
-    Serial.println("Found saved Wi-Fi credentials, trying to connect...");
-    connectToWiFi(inputSSID, inputPassword);
-    if (WiFi.status() == WL_CONNECTED) {
-      return; // Connected successfully
-    }
-  }
-
-  // If not connected, start AP mode
+  // Start AP first so it's always available
   startAccessPoint();
 
-  // Serve HTML page
+  // Load saved credentials and try connecting in STA mode
+  loadCredentials(inputSSID, inputPassword);
+  if (inputSSID.length() > 0) {
+    Serial.println("Found saved WiFi credentials, trying to connect...");
+    connectToWiFi(inputSSID, inputPassword);
+  }
+
+  // Serve HTML form
   server.on("/", HTTP_GET, [](AsyncWebServerRequest *req) {
     const char *html = R"rawliteral(
       <!DOCTYPE html>
@@ -146,11 +142,10 @@ void setup() {
       </body>
       </html>
     )rawliteral";
-
     req->send(200, "text/html", html);
   });
 
-  // ----------- New: Handle Query Params -----------
+  // Handle Query Params method
   server.on("/configure", HTTP_GET, [](AsyncWebServerRequest *req) {
     if (req->hasParam("ssid") && req->hasParam("password")) {
       inputSSID = req->getParam("ssid")->value();
@@ -161,7 +156,6 @@ void setup() {
 
       saveCredentials(inputSSID, inputPassword);
       req->send(200, "text/plain", "WiFi credentials saved! Restarting...");
-
       delay(1000);
       ESP.restart();
     } else {
@@ -169,7 +163,7 @@ void setup() {
     }
   });
 
-  // ----------- OLD JSON Method (Commented) -----------
+  // ----------- OLD JSON Method (Commented, kept intact) -----------
   /*
   server.on("/configure", HTTP_POST, [](AsyncWebServerRequest *req) {}, NULL, [](AsyncWebServerRequest *req, uint8_t *data, size_t len, size_t index, size_t total)
   {
@@ -189,7 +183,6 @@ void setup() {
 
     saveCredentials(inputSSID, inputPassword);
     req->send(200, "text/plain", "WiFi credentials saved! Restarting...");
-
     delay(1000);
     ESP.restart();
   });
@@ -199,6 +192,4 @@ void setup() {
   Serial.println("Server started.");
 }
 
-void loop() {
-  // Nothing needed here
-}
+void loop() {}
