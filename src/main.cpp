@@ -14,12 +14,28 @@ String inputPassword;
 
 // ===================== LED State Meaning =====================
 // LED ON     → ESP32 is in Access Point (AP) mode OR successfully connected to WiFi
-// LED OFF    → ESP32 has not connected to any network (initial state / failed connection)
+// LED OFF    → ESP32 has not connected to any network (initial state)
 // LED BLINK  → ESP32 is trying to connect to a saved WiFi network in Station (STA) mode
 // ===============================================================
 
-void turnOnLED() { digitalWrite(LED_PIN, HIGH); }   // Solid light (AP mode active or STA connected)
-void turnOffLED() { digitalWrite(LED_PIN, LOW); }   // LED off (no connection)
+// LED state variables for smooth blinking
+unsigned long previousMillis = 0;
+bool ledState = false;
+int blinkInterval = 0; // 0 = no blink (solid), >0 = blink speed in ms
+
+void turnOnLED() { 
+  blinkInterval = 0; // stop blinking
+  digitalWrite(LED_PIN, HIGH); 
+}   // Solid light (AP mode active or STA connected)
+
+void turnOffLED() { 
+  blinkInterval = 0; // stop blinking
+  digitalWrite(LED_PIN, LOW); 
+}   // LED off (no connection)
+
+void startBlink(int intervalMs) {
+  blinkInterval = intervalMs; // start blinking at given speed
+}
 
 // Always start AP mode
 void startAccessPoint() {
@@ -39,10 +55,11 @@ void connectToWiFi(const String &ssid, const String &pass) {
   Serial.printf("Connecting to WiFi: %s\n", ssid.c_str());
   WiFi.begin(ssid.c_str(), pass.c_str());
 
+  startBlink(500); // Blink LED while connecting (non-blocking)
+
   int retries = 0;
   while (WiFi.status() != WL_CONNECTED && retries < 20) {
-    digitalWrite(LED_PIN, !digitalRead(LED_PIN)); // Blink LED while connecting
-    delay(500);
+    delay(500); // just wait, blinking handled by loop()
     retries++;
   }
 
@@ -53,7 +70,7 @@ void connectToWiFi(const String &ssid, const String &pass) {
     turnOnLED(); // Solid ON when connected
   } else {
     Serial.println("\nFailed to connect to saved WiFi.");
-    turnOffLED(); // OFF if connection fails
+    turnOnLED(); // Keep ON because AP is still active
   }
 }
 
@@ -73,6 +90,15 @@ void setup() {
   EEPROM.begin(EEPROM_SIZE);
   pinMode(LED_PIN, OUTPUT);
   turnOffLED(); // OFF until AP starts
+
+  // ========== NEW FEATURE: Reset EEPROM credentials ==========
+  Serial.println("Clearing saved WiFi credentials...");
+  for (int i = 0; i < EEPROM_SIZE; i++) {
+    EEPROM.write(i, 0);
+  }
+  EEPROM.commit();
+  Serial.println("EEPROM cleared!");
+  // ============================================================
 
   // Start AP first so it's always available
   startAccessPoint();
@@ -192,4 +218,14 @@ void setup() {
   Serial.println("Server started.");
 }
 
-void loop() {}
+void loop() {
+  // Handle LED blinking without blocking
+  if (blinkInterval > 0) {
+    unsigned long currentMillis = millis();
+    if (currentMillis - previousMillis >= (unsigned long)blinkInterval) {
+      previousMillis = currentMillis;
+      ledState = !ledState;
+      digitalWrite(LED_PIN, ledState);
+    }
+  }
+}
