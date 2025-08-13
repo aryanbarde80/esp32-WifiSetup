@@ -4,8 +4,8 @@
 #include <ArduinoJson.h>
 #include <EEPROM.h>
 
-#define LED_PIN 2         // Blue LED pin
-#define EEPROM_SIZE 96    // For storing credentials
+#define LED_PIN 2      // Blue LED pin
+#define EEPROM_SIZE 96 // For storing credentials
 
 AsyncWebServer server(80);
 
@@ -25,7 +25,7 @@ void startAccessPoint() {
   WiFi.softAP("wifiSetup-Esp32", "bluewave@123");
 
   Serial.println("Access Point Mode Started");
-  Serial.println("SSID: baWifiSetup-Esp32");
+  Serial.println("SSID: wifiSetup-Esp32");
   Serial.println("Password: bluewave@123");
   Serial.print("AP IP Address: ");
   Serial.println(WiFi.softAPIP());
@@ -119,6 +119,17 @@ void setup() {
             e.preventDefault();
             const ssid = document.getElementById('ssid').value;
             const password = document.getElementById('password').value;
+
+            // Sending via Query Params
+            try {
+              const res = await fetch(`/configure?ssid=${encodeURIComponent(ssid)}&password=${encodeURIComponent(password)}`);
+              alert(await res.text());
+            } catch (err) {
+              alert('Error sending data!');
+            }
+
+            // ---------------- OLD JSON Method (commented) ----------------
+            /*
             try {
               const res = await fetch('/configure', {
                 method: 'POST',
@@ -129,6 +140,7 @@ void setup() {
             } catch (err) {
               alert('Error sending data!');
             }
+            */
           });
         </script>
       </body>
@@ -138,30 +150,50 @@ void setup() {
     req->send(200, "text/html", html);
   });
 
-  // Handle POST for Wi-Fi credentials
-  server.on("/configure", HTTP_POST, [](AsyncWebServerRequest *req) {}, NULL,
-            [](AsyncWebServerRequest *req, uint8_t *data, size_t len, size_t index, size_t total) {
-              JsonDocument json; // Replaces deprecated DynamicJsonDocument
-              DeserializationError error = deserializeJson(json, data, len);
+  // ----------- New: Handle Query Params -----------
+  server.on("/configure", HTTP_GET, [](AsyncWebServerRequest *req) {
+    if (req->hasParam("ssid") && req->hasParam("password")) {
+      inputSSID = req->getParam("ssid")->value();
+      inputPassword = req->getParam("password")->value();
 
-              if (error) {
-                req->send(400, "text/plain", "Invalid JSON");
-                return;
-              }
+      Serial.println("Received SSID (Query): " + inputSSID);
+      Serial.println("Received Password (Query): " + inputPassword);
 
-              inputSSID = json["ssid"].as<String>();
-              inputPassword = json["password"].as<String>();
+      saveCredentials(inputSSID, inputPassword);
+      req->send(200, "text/plain", "WiFi credentials saved! Restarting...");
 
-              Serial.println("Received SSID: " + inputSSID);
-              Serial.println("Received Password: " + inputPassword);
+      delay(1000);
+      ESP.restart();
+    } else {
+      req->send(400, "text/plain", "Missing SSID or password");
+    }
+  });
 
-              saveCredentials(inputSSID, inputPassword);
+  // ----------- OLD JSON Method (Commented) -----------
+  /*
+  server.on("/configure", HTTP_POST, [](AsyncWebServerRequest *req) {}, NULL, [](AsyncWebServerRequest *req, uint8_t *data, size_t len, size_t index, size_t total)
+  {
+    JsonDocument json;
+    DeserializationError error = deserializeJson(json, data, len);
 
-              req->send(200, "text/plain", "WiFi credentials saved! Restarting...");
+    if (error) {
+      req->send(400, "text/plain", "Invalid JSON");
+      return;
+    }
 
-              delay(1000);
-              ESP.restart();
-            });
+    inputSSID = json["ssid"].as<String>();
+    inputPassword = json["password"].as<String>();
+
+    Serial.println("Received SSID (JSON): " + inputSSID);
+    Serial.println("Received Password (JSON): " + inputPassword);
+
+    saveCredentials(inputSSID, inputPassword);
+    req->send(200, "text/plain", "WiFi credentials saved! Restarting...");
+
+    delay(1000);
+    ESP.restart();
+  });
+  */
 
   server.begin();
   Serial.println("Server started.");
