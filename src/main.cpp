@@ -25,12 +25,12 @@ int blinkInterval = 0; // 0 = no blink (solid), >0 = blink speed in ms
 
 void turnOnLED() { 
   blinkInterval = 0; // stop blinking
-  digitalWrite(LED_PIN, LOW);  // Active-low LED: LOW = ON
+  digitalWrite(LED_PIN, HIGH); 
 }   // Solid light (AP mode active or STA connected)
 
 void turnOffLED() { 
   blinkInterval = 0; // stop blinking
-  digitalWrite(LED_PIN, HIGH); // Active-low LED: HIGH = OFF
+  digitalWrite(LED_PIN, LOW); 
 }   // LED off (no connection)
 
 void startBlink(int intervalMs) {
@@ -229,7 +229,7 @@ void loop() {
     if (currentMillis - previousMillis >= (unsigned long)blinkInterval) {
       previousMillis = currentMillis;
       ledState = !ledState;
-      digitalWrite(LED_PIN, ledState ? LOW : HIGH); // LOW=ON, HIGH=OFF (active-low)
+      digitalWrite(LED_PIN, ledState);
     }
   }
 }
